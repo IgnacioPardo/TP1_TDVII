@@ -47,208 +47,66 @@ modelo relacional. El output será un modelo de tablas de la base de datos.
 Se espera que las relaciones construidas estén en BCNF
 
 
-Dominio - MercadoPago
+## Dominio - MercadoPago
 
-Modelo conceptual
+MercadoPago es una plataforma de pagos online que permite a los usuarios realizar pagos y transferencias a través de internet.  Además, permite a los usuarios invertir su dinero y obtener rendimientos. Los usuarios pueden vincular sus tarjetas de crédito y cuentas bancarias a la plataforma para realizar pagos y transferencias. La plataforma también permite a los usuarios realizar pagos de servicios.
+
+Existe un único tipo de usuario que puede realizar transacciones a otras cuentas de Mercado Pago o a cuentas de otros bancos. Por otro lado, pueden realizar pagos con tarjetas de crédito o débito. Suponemos que los pagos de servicios son transacciones o pagos que se realizan a una cuenta de un servicio (luz, gas, agua, teléfono, internet, entre otros) identificada con CBU.
+
+Las inversiones se realizan con plazos de 1 día. Los rendimientos se calculan en base a la cantidad de dinero invertido y el plazo de la inversión. Los rendimientos se acreditan en la cuenta del usuario al finalizar el plazo de la inversión. En cualquier momento, el usuario puede retirar su dinero invertido y los rendimientos obtenidos.
+
+Pretendemos poder analizar los datos sobre las transacciones y los rendimientos de los usuarios para poder tomar decisiones sobre la plataforma.
+
+## Modelo conceptual
 
 - Usuario
 - Transaccion
 - Inversiones
-- Servicios
-- PagoServicios
 - Tarjeta
 - CuentaBancaria
 
 Usuario
-- id
+- cvu
 - nombre
 - apellido
 - email
 - password
-- saldo (pesos)
-- saldo invertido (pesos)
-- inversiones (pesos) (1 a muchos)
-- cvu
 - alias
-- tarjetas (1 a muchos)
-- cuentas bancarias (1 a muchos)
-- pagos de servicios (1 a muchos)
+- saldo
+- invierte()
+- comienzo_plazo_inversion
+- es_comercio
 
 Transaccion
 - id
 - monto
 - fecha
-- usuario_de (1 a 1)
-- usuario_para (1 a 1)
+- detalle
+- es_con_tarjeta
+- interes
 
-Inversiones
+Rendimientos
 - id
+- fecha_pago
+- comienzo_pazo
+- fin_plazo
+- TNA
 - monto
-- fecha
-- rendimiento
-
-Servicios
-- id
-- nombre
-- descripcion
-- precio
-
-PagoServicios
-- id
-- monto
-- fecha
-- servicio
-- usuario
 
 Tarjeta
 - id
 - numero
 - vencimiento
 - cvv
-- usuario
 
 CuentaBancaria
-- id
 - cbu
 - alias
-- usuario
+- es_servicio
+- detalle_servicio
 
+\
+\
+![alt text](erd.png)
 
-
-## Object diagram - MercadoPago
-
-## Opción 1
-
-```mermaid
-classDiagram
-Usuario "1" --> "*" Transaccion : "realiza"
-Usuario "1" --> "*" Rendimientos : "obtiene"
-Usuario "1" --> "*" Inversiones : "realiza"
-Transaccion "1" --> "1" Usuario : "para"
-```
-
-## Opción 2
-
-```mermaid
-classDiagram
-Usuario <|-- Inversiones
-Usuario <|-- Tarjeta
-Usuario <|-- CuentaBancaria
-
-Usuario <|-- Transaccion
-Usuario <|-- Transaccion
-
-Usuario <|-- PagoServicios
-PagoServicios <|-- Servicios
-
-Usuario : id
-Usuario : nombre
-Usuario : apellido
-Usuario : email
-Usuario : password
-Usuario : saldo
-Usuario : saldo invertido
-Usuario : inversiones
-Usuario : cvu
-Usuario : alias
-Usuario : tarjetas
-Usuario : cuentas bancarias
-Usuario : pagos de servicios
-Transaccion : id
-Transaccion : monto
-Transaccion : fecha
-Transaccion : usuario_de
-Transaccion : usuario_para
-Inversiones : id
-Inversiones : monto
-Inversiones : fecha
-Inversiones : rendimiento
-Servicios : id
-Servicios : nombre
-Servicios : descripcion
-Servicios : precio
-PagoServicios : id
-PagoServicios : monto
-PagoServicios : fecha
-PagoServicios : servicio
-PagoServicios : usuario
-Tarjeta : id
-Tarjeta : numero
-Tarjeta : vencimiento
-Tarjeta : cvv
-Tarjeta : usuario
-CuentaBancaria : id
-CuentaBancaria : cbu
-CuentaBancaria : alias
-CuentaBancaria : usuario
-```
-
-## erDiagram - MercadoPago
-
-```mermaid
-erDiagram
-    USUARIO ||--o{ INVERSIONES : "realiza"
-    USUARIO ||--o{ TARJETA : "posee"
-    USUARIO ||--o{ CUENTA-BANCARIA : "posee"
-    USUARIO ||--o{ TRANSACCION : "realiza"
-    USUARIO ||--o{ TRANSACCION : "realiza"
-    USUARIO ||--o{ PAGO-SERVICIO : "realiza"
-    SERVICIO ||--o{ PAGO-SERVICIO : "paga"
-    USUARIO {
-        int id
-        string nombre
-        string apellido
-        string email
-        string password
-        float saldo
-        float saldo_invertido
-        int inversiones
-        int cvu
-        string alias
-        int tarjetas
-        int cuentas_bancarias
-        int pagos_de_servicio
-    }
-    TRANSACCION {
-        int id
-        float monto
-        date fecha
-        int usuario_de
-        int usuario_para
-    }
-    INVERSIONES {
-        int id
-        float monto
-        date fecha
-        float rendimiento
-    }
-    SERVICIO {
-        int id
-        string nombre
-        string descripcion
-        float precio
-    }
-    PAGO-SERVICIO {
-        int id
-        float monto
-        date fecha
-        int servicio
-        int usuario
-    }
-    TARJETA {
-        int id
-        int numero
-        date vencimiento
-        int cvv
-        int usuario
-    }
-    CUENTA-BANCARIA {
-        int id
-        string cbu
-        string alias
-        int usuario
-    }
-```
-
-
-## SQL - MercadoPago
+## Modelo lógico
