@@ -1,3 +1,4 @@
+﻿# Consigna
 En este trabajo práctico grupal diseñaremos la base de datos a ser utilizada
 para resolver un problema de un dominio específico. El trabajo deberá ser
 realizado en grupos de entre 2 y 3 estudiantes.
@@ -8,7 +9,7 @@ conceptual de la misma, mientras que la segunda entrega se enfocará en
 poder armar una arquitectura y un flujo de datos que habiliten a una
 organización a utilizarla.
 
-Primera entrega: diseño de la base de datos
+## Primera entrega: diseño de la base de datos
 
 Esta entrega se enfoca en desarrollar todos los tópicos que trabajamos en la
 primera mitad de la materia: tomar un dominio, hacer un modelado
@@ -35,7 +36,6 @@ alcance del modelo (por ejemplo, en el caso de una App como Spotify, ¿el
 objetivo sería modelar toda la actividad del usuario? ¿modelar también la
 facturación y pagos? ¿o ambas cosas? ¿Queremos también tener la
 posibilidad de analizar los datos para tomar decisiones?
-
 El output de este paso deberá ser un análisis de requerimientos de la base
 de datos.
 
@@ -45,68 +45,51 @@ el dominio. Construir un modelo entidad-interrelación del mismo.
 3. Modelado lógico. Realizar el pasaje del modelo entidad-interrelación al
 modelo relacional. El output será un modelo de tablas de la base de datos.
 Se espera que las relaciones construidas estén en BCNF
+4. Modelado físico. Definir las tablas en la base de datos. El output será un script SQL que automatice la construcción de todas las tablas junto con sus restricciones, y la eventual definición de usuarios y permisos. 
+5. Consulta. Diseñar al menos 10 consultas que sirvan para describir los datos. Las consultas deben incluir: ○ Juntas (JOIN) ○ Agrupamiento (GROUP BY) ○ Funciones de ventana (window functions)
 
+# Resolución
+## Dominio - Mercado Pago
 
-## Dominio - MercadoPago
+Para comenzar, vamos a definir el dominio que vamos a modelar, que es la aplicación de Mercado Pago. Queremos enfocarnos en varios aspectos de la aplicación: los usuarios que realizan transacciones entre ellos, transacciones a/desde cuentas bancarias externas, pago de servicios e inversiones con rendimiento diario. A continuación realizamos una descripción mas detallada del alcance y requerimientos del modelo.
 
-MercadoPago es una plataforma de pagos online que permite a los usuarios realizar pagos y transferencias a través de internet.  Además, permite a los usuarios invertir su dinero y obtener rendimientos. Los usuarios pueden vincular sus tarjetas de crédito y cuentas bancarias a la plataforma para realizar pagos y transferencias. La plataforma también permite a los usuarios realizar pagos de servicios.
+### Análisis de Requerimientos de la Base de Datos
 
-Existe un único tipo de usuario que puede realizar transacciones a otras cuentas de Mercado Pago o a cuentas de otros bancos. Por otro lado, pueden realizar pagos con tarjetas de crédito o débito. Suponemos que los pagos de servicios son transacciones o pagos que se realizan a una cuenta de un servicio (luz, gas, agua, teléfono, internet, entre otros) identificada con CBU.
+#### Usuarios:
 
-Las inversiones se realizan con plazos de 1 día. Los rendimientos se calculan en base a la cantidad de dinero invertido y el plazo de la inversión. Los rendimientos se acreditan en la cuenta del usuario al finalizar el plazo de la inversión. En cualquier momento, el usuario puede retirar su dinero invertido y los rendimientos obtenidos.
+-   La base de datos debe permitir el registro y almacenamiento de usuarios de la aplicación de Mercado Pago.
+-   Se requiere almacenar información personal de los usuarios, como nombre, dirección, correo electrónico, número de teléfono y DNI.
 
-Pretendemos poder analizar los datos sobre las transacciones y los rendimientos de los usuarios para poder tomar decisiones sobre la plataforma.
+#### Transacciones entre Usuarios:
+
+-   Los usuarios deben poder realizar transacciones entre ellos dentro de la aplicación. A este tipo de transacción la denominamos **Transacción Interna**.
+-   Cada transacción debe registrar el monto, la fecha, la descripción y su estado (pendiente, fallida, completada).
+- Las transacciones pueden ser realizadas con saldo en cuenta o con tarjetas de crédito/débito. En caso de que se realice con tarjeta de crédito, la transacción tiene un costo extra de interés.
+
+#### Transacciones a/desde Cuentas Bancarias Externas:
+
+-  Los usuarios deben poder realizar transacciones de dinero desde sus cuentas de Mercado Pago a Cuentas Bancarias Externas. Estas transacciones pueden ser realizadas con saldo en cuenta o con tarjetas de crédito/débito.
+-  Los usuarios deben poder recibir transferencias desde Cuentas Bancarias Externas a sus cuentas de Mercado Pago.
+-   Cada transacción debe registrar el monto, la fecha, la cuenta bancaria de destino/origen y su estado. A este tipo de transacción la denominamos **Transacción Externa**.
+
+#### Pago de Servicios:
+
+-   Los usuarios deben poder utilizar la aplicación para pagar servicios, como facturas de servicios públicos, recargas de celular, etc.
+- Las empresas que deseen cobrar sus servicios por Mercado Pago deben registrarse dentro de la aplicación como proveedor de servicio. Por simplificación, asumimos que las empresas brindan una Cuenta Bancaria Externa para realizar los cobros, por lo que un pago de servicio es una **Transacción Externa**.
+-   Se necesita almacenar información sobre los servicios pagados, como el proveedor de servicio, el monto, la fecha y el destinatario del pago.
+
+#### Inversiones y rendimientos:
+
+-   Los usuarios deben poder invertir dinero y obtener rendimientos diarios a través de la aplicación.
+-   Se necesita almacenar información sobre las inversiones, como el monto invertido, la tasa de interés, la fecha de inicio y vencimiento, etc.
+
+Con esta información, podemos pasar al modelado conceptual.
 
 ## Modelo conceptual
-
+Los principales tipos de entidades de nuestro modelo son:
 - Usuario
-- Transaccion
-- Inversiones
+- Transacción
+- Inversion
 - Tarjeta
 - CuentaBancaria
-
-Usuario
-- cvu
-- nombre
-- apellido
-- email
-- password
-- alias
-- saldo
-- invierte()
-- comienzo_plazo_inversion
-- es_comercio
-
-Transaccion
-- id
-- monto
-- fecha
-- detalle
-- es_con_tarjeta
-- interes
-
-Rendimientos
-- id
-- fecha_pago
-- comienzo_pazo
-- fin_plazo
-- TNA
-- monto
-
-Tarjeta
-- id
-- numero
-- vencimiento
-- cvv
-
-CuentaBancaria
-- cbu
-- alias
-- es_servicio
-- detalle_servicio
-
-\
-\
-![alt text](erd.png)
-
-## Modelo lógico
+- ProveedorServicio
