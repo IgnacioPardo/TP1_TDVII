@@ -114,6 +114,8 @@ A continuación presentamos nuestro pasaje a modelo relacional
 
 </Relations>
 
+En las siguientes tablas presentamos los dominios de cada atributo
+
 ``` mermaid
 erDiagram
 
