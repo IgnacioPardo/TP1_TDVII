@@ -334,4 +334,4 @@ Para resolver la normalización, decidimos crear una tabla para las Claves Unifo
 
 9. (Para hacer con window functions)
 
-10.
+10. Calcular los intereses ganados en transacciones pagados con tarjetas en el último més.
