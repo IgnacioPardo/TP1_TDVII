@@ -9,13 +9,13 @@ Para comenzar, vamos a definir el dominio que vamos a modelar, que es la aplicac
 #### Usuarios:
 
 -   La base de datos debe permitir el registro y almacenamiento de usuarios de la aplicación de Mercado Pago.
--   Se requiere almacenar información personal de los usuarios, como nombre, dirección, correo electrónico, número de teléfono y DNI.
+-   Se requiere almacenar información personal de los usuarios, como nombre, dirección, correo electrónico, número de teléfono y CUIT.
 
 #### Transacciones entre Usuarios:
 
 -   Los usuarios deben poder realizar transacciones entre ellos dentro de la aplicación. 
 -   Cada transacción debe registrar el monto, la fecha, la descripción y su estado (pendiente, fallida, completada).
-- Las transacciones pueden ser realizadas con saldo en cuenta o con tarjetas de crédito/débito. En caso de que se realice con tarjeta de crédito, la transacción tiene un costo extra de interés.
+- Las transacciones pueden ser realizadas con saldo en cuenta o con tarjetas de crédito. En caso de que se realice con tarjeta de crédito, la transacción tiene un costo extra de interés.
 
 #### Transacciones a/desde Cuentas Bancarias Externas:
 
