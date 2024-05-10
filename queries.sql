@@ -29,6 +29,7 @@ GROUP BY u.clave_uniforme;
 -- 5. El provedor de servicios con mas pagos recibidos en el último mes.
 SELECT ps.clave_uniforme, ps.nombre_empresa, COUNT(*) AS pagos_recibidos, SUM(t.monto) AS monto_total
 FROM ProveedorServicio ps INNER JOIN Transaccion t ON (ps.clave_uniforme = t.CU_Destino)
+WHERE t.estado = 'Completada'
 GROUP BY ps.clave_uniforme, ps.nombre_empresa
 ORDER BY pagos_recibidos
 LIMIT 1;
@@ -66,6 +67,7 @@ SELECT
 	MAX(t.monto) AS mayor_monto 
 FROM Transaccion t
 WHERE EXTRACT(MONTH  FROM t.fecha) =  EXTRACT(MONTH  FROM  CURRENT_DATE)
+AND t.estado = 'Completada'
 GROUP BY t.CU_Origen
 ORDER  BY mayor_monto DESC;
 
@@ -74,10 +76,34 @@ SELECT
 	ru.CVU, 
 	SUM(r.monto * r.TNA *  EXTRACT(DAY  FROM (r.fin_plazo - r.comienzo_plazo)) /  365) AS rendimiento_total 
 FROM Rendimiento r INNER JOIN RendimientoUsuario ru ON r.id = ru.id 
+WHERE r.fin_plazo > CURRENT_DATE
 GROUP  BY ru.CVU 
 ORDER  BY rendimiento_total DESC;
 
--- 9. Para cada tran
+-- 9. Calcular el saldo resultante después de cada transaccion
+-- Calcular el saldo resultante después de cada transacción recibida
+SELECT 
+    t.codigo AS operacion_id,
+    t.CU_Destino AS usuario_id,
+    t.fecha,
+    'Transaccion Recibida' AS tipo_operacion,
+    t.monto,
+    t.monto + SUM(t2.monto) OVER (PARTITION BY t.CU_Destino ORDER BY t.fecha, t.codigo ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS saldo_resultante
+FROM Transaccion t
+LEFT JOIN Transaccion t2 ON t.CU_Destino = t2.CU_Destino AND t.fecha >= t2.fecha AND t.codigo >= t2.codigo;
+
+-- Calcular el saldo resultante después de cada transacción realizada
+SELECT 
+    t.codigo AS operacion_id,
+    t.CU_Origen AS usuario_id,
+    t.fecha,
+    'Transaccion Realizada' AS tipo_operacion,
+    t.monto * -1 AS monto, -- Se multiplica por -1 para reflejar la disminución del saldo
+    (t.monto * -1) + SUM(t2.monto) OVER (PARTITION BY t.CU_Origen ORDER BY t.fecha, t.codigo ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS saldo_resultante
+FROM Transaccion t
+LEFT JOIN Transaccion t2 ON t.CU_Origen = t2.CU_Origen AND t.fecha >= t2.fecha AND t.codigo >= t2.codigo;
+
+
 
 -- 10. Calcular los intereses ganados en transacciones pagadas con tarjeta en el último mes.
 SELECT SUM(t.monto * t.interes)
