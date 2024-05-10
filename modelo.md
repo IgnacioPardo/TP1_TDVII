@@ -1,4 +1,6 @@
-﻿# Consigna
+﻿<!-- markdownlint-disable MD033 MD046 -->
+
+# Consigna
 En este trabajo práctico grupal diseñaremos la base de datos a ser utilizada
 para resolver un problema de un dominio específico. El trabajo deberá ser
 realizado en grupos de entre 2 y 3 estudiantes.
@@ -93,3 +95,243 @@ Los principales tipos de entidades de nuestro modelo son:
 - Tarjeta
 - CuentaBancaria
 - ProveedorServicio
+
+## Modelo Entidad-Interrelación
+
+<!-- Usuarios generan rendimientos
+Usuarios poseen tarjetas
+Usuario Realiza Transaccion
+Usuario Recibe Transaccion
+Transacciones Pagan con Tarjeta
+CuentaBancaria Realiza Transaccion
+CuentaBancaria Recibe Transaccion
+CuentaBancaria Cobra Por ProveedorServicio -->
+
+```mermaid
+
+erDiagram
+
+Usuario ||--|| Genera : ""
+Usuario ||--|| Recibe : ""
+Usuario ||--|| Realiza : ""
+Usuario ||--|| Posee : ""
+
+Genera  ||--|{ Rendimientos : ""
+
+Recibe  ||--|{ Transaccion : ""
+Realiza ||--|{ Transaccion : ""
+
+Posee ||--|{ Tarjeta : ""
+
+Transaccion }|--|| Paga_Con : ""
+Tarjeta ||--|| Paga_Con : ""
+
+CuentaBancaria ||--|| Realiza : ""
+CuentaBancaria ||--|| Recibe : ""
+
+Realiza ||--|{ Transaccion : ""
+
+CuentaBancaria ||--|| Cobra_Por : ""
+ProveedorServicio ||--|| Cobra_Por : ""
+
+
+
+    Genera
+    Realiza
+    Recibe
+    Paga_Con
+    Cobra_Por
+    
+
+    Usuario{
+        varchar cvu PK
+        varchar CUIT
+        varchar email
+        varchar nombre
+        varchar apellido
+        varchar username
+        varchar password
+        varchar alias
+        float saldo
+        date fecha_alta
+    }
+
+    Rendimientos{
+        int id PK
+        date fecha_pago
+        date comienzo_plazo
+        date fin_plazo
+        float TNA
+        float monto
+    }
+
+    Transaccion{
+        int codigo PK
+        float monto
+        date fecha
+        varchar descripcion
+        float origen_monto
+        float interes
+        bool tipo_transaccion
+        estado estado "[estado]"
+    }
+
+    ProveedorServicio{
+        varchar CUIT PK
+        varchar nombre_empresa
+        varchar categoria_servicio
+        date fecha_alta
+    }
+
+    CuentaBancaria{
+        varchar cbu PK
+        varchar alias
+    }
+
+    Tarjeta{
+        varchar numero PK
+        date vencimiento
+        int cvv
+    }
+```
+
+## Modelo Relacional
+
+<style>
+    fk {
+        border-bottom: 1px dashed #999;
+        text-decoration: none;
+    }
+
+    pk {
+        border-bottom: 1px solid #999;
+        text-decoration: none;
+    }
+
+    Relations {
+        background-color: #f4f4f4;
+        border: 1px solid #ddd;
+        border-radius: 3px;
+        display: block;
+        margin: 1em 0;
+        padding: 1em;
+        white-space: pre;
+        font-family: "Fira Code", "Source Code Pro", Menlo, Monaco, Consolas, "Courier New", monospace;
+        text-align: left;
+        text-wrap: pretty;
+    }
+
+    r {
+        font-weight: bold;
+    }
+
+    /* if fk inside pk give the pk some space between the underlines */
+    pk:has(> fk) {
+        padding-bottom: 0.2em;
+    }
+
+</style>
+
+<Relations>
+
+<r>Usuario</r>(<pk>CVU</pk>, CUIT, email, nombre, apellido, username, password, alias, saldo, fecha_alta)
+<r>CuentaBancaria</r>(<pk>CBU</pk>, alias, banco)
+<r>Transaccion</r>(<pk>codigo</pk>, <fk>CU_Origen</fk>, <fk>CU_Destino</fk>, tipo_origen, tipo_destino, monto, fecha, descripcion, estado, es_con_tarjeta, <fk>numero</fk>, interes)
+<r>Rendimiento</r>(<pk>id</pk>, fecha_pago, comienzo_plazo, fin_plazo, TNA, monto)
+<r>ProveedorServicio</r>(<pk>CUIT</pk>, <fk>CBU</fk>, nombre_empresa, categoria_servicio, fecha_alta, alias)
+<r>Tarjeta</r>(<pk>numero</pk>, vencimiento, cvv, <fk>CVU</fk>)
+
+<!-- Tablas Intermedias: -->
+
+<r>RendimientoUsuario</r>(<pk><fk>CVU</fk>, <fk>id</fk></pk>)
+<r>TransaccionTarjeta</r>(<pk><fk>codigo</fk>, <fk>numero</fk></pk>)
+
+</Relations>
+
+## Normalización
+
+Para normalizar nuestro modelo, vamos a analizar las dependencias funcionales de cada tabla.
+
+### Usuario
+
+    CVU -> CUIT, email, nombre, apellido, username, password, alias, saldo, fecha_alta
+    alias -> CVU, CUIT, email, nombre, apellido, username, password, saldo, fecha_alta
+
+### CuentaBancaria
+
+    CBU -> alias, banco
+    alias -> CBU, banco
+
+### Transaccion
+
+    codigo -> CU_Origen, CU_Destino, tipo_origen, tipo_destino, monto, fecha, descripcion, estado, es_con_tarjeta, numero, interes
+
+### Rendimiento
+
+    id -> fecha_pago, comienzo_plazo, fin_plazo, TNA, monto
+
+### ProveedorServicio
+
+    CBU -> CUIT, nombre_empresa, categoria_servicio, fecha_alta
+    alias -> CBU, CUIT, nombre_empresa, categoria_servicio, fecha_alta
+
+### Tarjeta
+
+    numero -> vencimiento, cvv, CVU
+
+### RendimientoUsuario
+
+    CVU, id -> CVU, id
+
+### TransaccionTarjeta
+
+    codigo, numero -> codigo, numero
+
+### Normalización
+
+Tenemos dependencias funcionales parciales en las tablas Usuario, CuentaBancaria, ProveedorServicio y Tarjeta ya que todos los atributes o dependen de la clave primaria o de un atributo que no es clave primaria (alias).
+
+Para resolver la normalización, decidimos crear una tabla para las Claves Uniformes, que se utilizan como clave primaria en las tablas de Usuario, CuentaBancaria, ProveedorServicio y Tarjeta. Esta tabla nos indica tambien un alias para cada Clave Uniforme, y si la Clave Uniforme es del tipo CVU (Clave Virtual Uniforme) o CBU (Clave Bancaria Uniforme). Ademas de esta forma la Transaccion puede referenciar a la Clave Uniforme de origen y destino sin tener que repetir los tipos de Clave Uniforme de origen y destino.
+
+<Relations>
+
+<r>Clave</r>(<pk>clave_uniforme, alias</pk> esVirtual)
+
+<r>Usuarios</r>(<pk><fk>clave_uniforme</fk><pk>, CUIT, email, nombre, apellido, username, password, saldo, fecha_alta)
+
+<r>CuentaBancaria</r>(<pk><fk>clave_uniforme</fk><pk>, banco)
+
+<r>ProveedorServicio</r>(<pk><fk>clave_uniforme</fk><pk>, nombre_empresa, categoria_servicio, fecha_alta)
+
+<r>Transaccion</r>(<pk>codigo</pk>, <fk>CU_Origen</fk>, <fk>CU_Destino</fk>, monto, fecha, descripcion, estado, es_con_tarjeta, <fk>numero</fk>, interes)
+
+</Relations>
+
+## Modelo Físico
+<!-- Read and display modelo.sql -->
+
+## Consultas
+
+1. Listar los usuarios que realizaron transacciones con tarjeta de crédito.
+
+    1. Listar los montos transaccionados con tarjetas de crédito.
+
+2. Listar las transacciones realizadas por un usuario en particular.
+
+    2. Listar las transacciones realizadas por un usuario en particular en un periodo de tiempo
+
+3. Obtener los rendimientos en un periodo de tiempo para todos los usuarios.
+
+4. Cantidad de transacciones rechazadas y la suma de los montos de las mismas para todos los usuarios y para un usuario en particular.
+
+5. El pago de servicios con mas pagos recibidos en el último mes.
+
+6. (Para hacer con window functions) Calcular los rendimientos relativos al periodo anterior para cada usuario.
+
+7. Ranking de usuarios con mayor monto transaccionado en el último mes.
+
+8. Ranking de usuarios por rendimientos obtenidos.
+
+9. (Para hacer con window functions)
+
+10.
