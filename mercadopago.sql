@@ -67,7 +67,8 @@ CREATE TABLE Rendimiento (
     comienzo_plazo DATE NOT NULL,
     fin_plazo DATE,
     TNA FLOAT,
-    monto FLOAT
+    monto FLOAT,
+    pago BOOLEAN DEFAULT FALSE NOT NULL
 );
 
 CREATE TABLE RendimientoUsuario (
@@ -94,6 +95,7 @@ CREATE TABLE Transaccion (
     FOREIGN KEY (numero) REFERENCES Tarjeta(numero)
 );
 
+-- Checkear balances para debitar
 CREATE OR REPLACE FUNCTION check_balance()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -104,42 +106,133 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Para el usuario 2:
--- depositar 1000, 
--- comenzar un rendimiento
--- interrumpirlo transfiriendole 500 al usuario 1 (Agregar un trigger para que cuando se cree una transacción, si el usuario tiene un rendimiento activo, se finalice y se cree uno nuevo con el monto restante pero que no se pague)
--- continuar el rendimiento y pagar los rendimientos
+CREATE TRIGGER check_balance_trigger
+BEFORE INSERT ON Transaccion
+FOR EACH ROW
+WHEN (NEW.es_con_tarjeta = FALSE)
+EXECUTE FUNCTION check_balance();
 
+
+-- Checkear rendimiento activo
 CREATE OR REPLACE FUNCTION check_rendimiento()
 RETURNS TRIGGER AS $$
 BEGIN
-    -- Checkear si el usuario tiene un rendimiento activo, es decir sin fecha de fin
+    -- Checkear si el usuario tiene un rendimiento activo, es decir fecha de fin_plazo es posterior a la fecha de la transaccion
     -- Joinear RendimientoUsuario con Rendimiento para obtener el id del rendimiento activo
     IF EXISTS (
-        SELECT * FROM RendimientoUsuario JOIN Rendimiento ON RendimientoUsuario.id = Rendimiento.id WHERE clave_uniforme = NEW.CU_Origen AND fin_plazo IS NULL
+        SELECT * FROM RendimientoUsuario JOIN Rendimiento ON RendimientoUsuario.id = Rendimiento.id WHERE clave_uniforme = NEW.CU_Origen AND NEW.fecha < Rendimiento.fin_plazo 
     ) THEN
-        
         -- Finalizar el rendimiento
-        UPDATE Rendimiento SET fin_plazo = NEW.fecha WHERE id = (SELECT id FROM RendimientoUsuario WHERE clave_uniforme = NEW.CU_Origen AND fin_plazo IS NULL);
-        -- Crear un nuevo rendimiento con el monto restante
-        INSERT INTO Rendimiento (fecha_pago, comienzo_plazo, TNA, monto) VALUES (NEW.fecha, NEW.fecha, 0.1, (SELECT saldo FROM Usuarios WHERE clave_uniforme = NEW.CU_Origen) - NEW.monto);
-        INSERT INTO RendimientoUsuario (clave_uniforme, id) VALUES (NEW.CU_Origen, (SELECT id FROM Rendimiento WHERE fecha_pago = NEW.fecha AND comienzo_plazo = NEW.fecha AND TNA = 0.1 AND monto = (SELECT saldo FROM Usuarios WHERE clave_uniforme = NEW.CU_Origen) - NEW.monto));
+
+        -- UPDATE Rendimiento 
+        -- SET fin_plazo = NEW.fecha
+        -- WHERE id = (SELECT id FROM RendimientoUsuario WHERE clave_uniforme = NEW.CU_Origen AND fin_plazo IS NULL)
+        -- RETURNING TNA, monto INTO old_tna, old_monto;
+
+        -- INSERT INTO Rendimiento (fin_plazo, comienzo_plazo, TNA, monto) 
+        -- VALUES (
+        --     NEW.fecha + INTERVAL '1 day',
+        --     NEW.fecha, 
+        --     old_tna,
+        --     old_monto - NEW.monto
+        -- )
+        -- RETURNING id INTO new_id;
+        
+        -- INSERT INTO RendimientoUsuario (clave_uniforme, id) 
+        -- VALUES (
+        --     NEW.CU_Origen, 
+        --     new_id
+        -- );
+        
+        UPDATE Rendimiento 
+        SET fin_plazo = NEW.fecha
+        WHERE id = (SELECT id FROM RendimientoUsuario WHERE clave_uniforme = NEW.CU_Origen AND fin_plazo IS NULL);
+
+        INSERT INTO Rendimiento (fin_plazo, comienzo_plazo, TNA, monto) 
+        VALUES (
+            NEW.fecha + INTERVAL '1 day',
+            NEW.fecha, 
+            -- Select last TNA and monto from the rendimiento
+            (SELECT TNA FROM Rendimiento WHERE id = (SELECT id FROM RendimientoUsuario WHERE clave_uniforme = NEW.CU_Origen AND fin_plazo IS NOT NULL)),
+            (SELECT monto FROM Rendimiento WHERE id = (SELECT id FROM RendimientoUsuario WHERE clave_uniforme = NEW.CU_Origen AND fin_plazo IS NOT NULL)) - NEW.monto
+        );
+        
+        INSERT INTO RendimientoUsuario (clave_uniforme, id) 
+        VALUES (
+            NEW.CU_Origen, 
+            -- Select id from last Rendimiento inserted
+            (SELECT id FROM Rendimiento ORDER BY id DESC LIMIT 1)
+        );
+
+
+
     END IF;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER check_rendimiento_trigger
-BEFORE INSERT ON Transaccion
+AFTER INSERT ON Transaccion
 FOR EACH ROW
 WHEN (NEW.es_con_tarjeta = FALSE)
 EXECUTE FUNCTION check_rendimiento();
 
-CREATE TRIGGER check_balance_trigger
+-- Checkear si la tarjeta es valida
+CREATE OR REPLACE FUNCTION check_tarjeta()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NOT EXISTS (SELECT * FROM Tarjeta WHERE numero = NEW.numero) THEN
+        RAISE EXCEPTION 'Tarjeta no existe';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER check_tarjeta_trigger
 BEFORE INSERT ON Transaccion
 FOR EACH ROW
-WHEN (NEW.es_con_tarjeta = FALSE)
-EXECUTE FUNCTION check_balance();
+WHEN (NEW.es_con_tarjeta = TRUE)
+EXECUTE FUNCTION check_tarjeta();
+
+-- Checkear si la tarjeta es del usuario
+CREATE OR REPLACE FUNCTION check_tarjeta_usuario()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF (SELECT CU FROM Tarjeta WHERE numero = NEW.numero) = NEW.CU_Origen THEN
+        RAISE EXCEPTION 'Tarjeta no pertenece al usuario';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER check_tarjeta_usuario_trigger
+BEFORE INSERT ON Transaccion
+FOR EACH ROW
+WHEN (NEW.es_con_tarjeta = TRUE)
+EXECUTE FUNCTION check_tarjeta_usuario();
+
+-- Actualizar los saldos de origen y/o destino solo si son Claves Uniformes Virtuales
+-- Si la transaccion es con tarjeta, solo se actualiza el saldo del destino si es virtual
+
+CREATE OR REPLACE FUNCTION update_saldos()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF (SELECT esVirtual FROM Clave WHERE clave_uniforme = NEW.CU_Destino) = TRUE THEN
+        UPDATE Usuarios SET saldo = saldo + NEW.monto WHERE clave_uniforme = NEW.CU_Destino;
+    END IF;
+    IF NEW.es_con_tarjeta = FALSE THEN
+        IF (SELECT esVirtual FROM Clave WHERE clave_uniforme = NEW.CU_Origen) = TRUE THEN
+            UPDATE Usuarios SET saldo = saldo - NEW.monto WHERE clave_uniforme = NEW.CU_Origen;
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER update_saldos_trigger
+AFTER INSERT ON Transaccion
+FOR EACH ROW
+EXECUTE FUNCTION update_saldos();
 
 CREATE TABLE TransaccionTarjeta (
     codigo INTEGER,
@@ -148,3 +241,4 @@ CREATE TABLE TransaccionTarjeta (
     FOREIGN KEY (numero) REFERENCES Tarjeta(numero),
     FOREIGN KEY (codigo) REFERENCES Transaccion(codigo)
 );
+
