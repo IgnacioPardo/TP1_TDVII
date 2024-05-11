@@ -1,4 +1,9 @@
-﻿<!-- markdownlint-disable MD033 MD046 -->
+﻿<h1> Trabajo Práctico 1 - TDVII: Ingeniería de Datos</h1>
+
+## Integrantes
+
+- Ignacio Pardo | 21R1160 | [ipardo@mail.utdt.edu](mailto:ipardo@mail.utdt.edu)
+- Juan Ignacio Silvestri | 21Q111 | [jsilvestri@mail.utdt.edu](mailto:jsilvestri@mail.utdt.edu)
 
 ## Dominio - Mercado Pago
 
@@ -60,6 +65,8 @@ CuentaBancaria Realiza Transaccion
 CuentaBancaria Recibe Transaccion
 CuentaBancaria Cobra Por ProveedorServicio -->
 
+<br><br><br><br><br><br><br><br><br><br><br><br>
+
 ## Modelo Relacional
 
 <style>
@@ -102,14 +109,21 @@ A continuación presentamos nuestro pasaje a modelo relacional
 <Relations>
 
 <r>Clave</r>(<pk>clave_uniforme</pk>, alias, esVirtual)
+
 <r>Usuario</r>(<pk><fk>clave_uniforme</fk></pk>, CUIT, email, nombre, apellido, username, password, saldo, fecha_alta)
+
 <r>CuentaBancaria</r>(<pk><fk>clave_uniforme</fk></pk>, banco)
+
 <r>ProveedorServicio</r>(<pk><fk>clave_uniforme</fk></pk>, nombre_empresa, categoria_servicio, fecha_alta)
+
 <r>Transaccion</r>(<pk>codigo</pk>, <fk>CU_Origen</fk>, <fk>CU_Destino</fk>, monto, fecha, descripcion, estado, es_con_tarjeta, <fk>numero_tarjeta</fk>, interes)
+
 <r>Rendimiento</r>(<pk>id</pk>, fecha_pago, comienzo_plazo, fin_plazo, TNA, monto)
+
 <r>Tarjeta</r>(<pk>numero</pk>, vencimiento, cvv, <fk>CVU</fk>)
 
 <r>RendimientoUsuario</r>(<pk><fk>CVU</fk>, <fk>id</fk></pk>)
+
 <r>TransaccionTarjeta</r>(<pk><fk>codigo</fk>, <fk>numero_tarjeta</fk></pk>)
 
 </Relations>

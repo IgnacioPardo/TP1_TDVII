@@ -2,13 +2,15 @@ DROP SCHEMA public CASCADE;
 CREATE SCHEMA public;
 GRANT ALL ON SCHEMA public TO public;
 
+
 CREATE TABLE Clave (
     clave_uniforme VARCHAR(50) PRIMARY KEY,
     alias VARCHAR(50) NOT NULL,
     esVirtual BOOLEAN NOT NULL
 );
 
-CREATE TABLE Usuarios (
+
+CREATE TABLE Usuario (
     clave_uniforme VARCHAR(50) PRIMARY KEY,
     CUIT VARCHAR(50),
     email VARCHAR(50),
@@ -16,16 +18,18 @@ CREATE TABLE Usuarios (
     apellido VARCHAR(50),
     username VARCHAR(50),
     password VARCHAR(50),
-    saldo FLOAT,
+    saldo FLOAT DEFAULT 0,
     fecha_alta DATE,
     FOREIGN KEY (clave_uniforme) REFERENCES Clave(clave_uniforme)
 );
+
 
 CREATE TABLE CuentaBancaria (
     clave_uniforme VARCHAR(50) PRIMARY KEY,
     banco VARCHAR(50),
     FOREIGN KEY (clave_uniforme) REFERENCES Clave(clave_uniforme)
 );
+
 
 CREATE TABLE ProveedorServicio (
     clave_uniforme VARCHAR(50) PRIMARY KEY,
@@ -35,6 +39,7 @@ CREATE TABLE ProveedorServicio (
     FOREIGN KEY (clave_uniforme) REFERENCES Clave(clave_uniforme)
 );
 
+
 CREATE TABLE Tarjeta (
     numero VARCHAR(50) PRIMARY KEY,
     vencimiento DATE,
@@ -43,6 +48,7 @@ CREATE TABLE Tarjeta (
     FOREIGN KEY (CU) REFERENCES Clave(clave_uniforme),
     CHECK (CU IS NOT NULL)
 );
+
 
 -- Add trigger on insert to check if cu is virtual, if not, raise exception
 
@@ -71,6 +77,7 @@ CREATE TABLE Rendimiento (
     pago BOOLEAN DEFAULT FALSE NOT NULL
 );
 
+
 CREATE TABLE RendimientoUsuario (
     clave_uniforme VARCHAR(50),
     id INTEGER,
@@ -78,6 +85,7 @@ CREATE TABLE RendimientoUsuario (
     FOREIGN KEY (clave_uniforme) REFERENCES Clave(clave_uniforme),
     FOREIGN KEY (id) REFERENCES Rendimiento(id)
 );
+
 
 CREATE TABLE Transaccion (
     codigo SERIAL PRIMARY KEY,
@@ -99,19 +107,50 @@ CREATE TABLE Transaccion (
 CREATE OR REPLACE FUNCTION check_balance()
 RETURNS TRIGGER AS $$
 BEGIN
-    IF (SELECT saldo FROM Usuarios WHERE clave_uniforme = NEW.CU_Origen) < NEW.monto THEN
-        RAISE EXCEPTION 'Not enough balance';
+    IF (SELECT esVirtual FROM Clave WHERE clave_uniforme = NEW.CU_Origen) = FALSE THEN
+        IF (SELECT esVirtual FROM Clave WHERE clave_uniforme = NEW.CU_Destino) = TRUE THEN
+            UPDATE Transaccion SET estado = 'Completada' WHERE codigo = NEW.codigo;
+        ELSE
+            UPDATE Transaccion SET estado = 'Rechazada' WHERE codigo = NEW.codigo;
+            RAISE EXCEPTION 'No se registran transacciones entre cuentas no virtuales y no virtuales';
+        END IF;
+    ELSE
+        IF (SELECT saldo FROM Usuario WHERE clave_uniforme = NEW.CU_Origen) < NEW.monto THEN
+            UPDATE Transaccion SET estado = 'Rechazada' WHERE codigo = NEW.codigo;
+            -- RAISE EXCEPTION 'Not enough balance';
+        ELSE
+            IF NEW.estado != 'Rechazada' THEN
+                UPDATE Transaccion SET estado = 'Completada' WHERE codigo = NEW.codigo;
+            END IF;
+        END IF;
     END IF;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER check_balance_trigger
-BEFORE INSERT ON Transaccion
+AFTER INSERT ON Transaccion
 FOR EACH ROW
 WHEN (NEW.es_con_tarjeta = FALSE)
 EXECUTE FUNCTION check_balance();
 
+-- Marcar como aceptadas todas las que son con tarjeta
+
+CREATE OR REPLACE FUNCTION check_desde_tarjeta()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF (SELECT esVirtual FROM Clave WHERE clave_uniforme = NEW.CU_Origen) = TRUE THEN
+        UPDATE Transaccion SET estado = 'Completada' WHERE codigo = NEW.codigo;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER check_desde_tarjeta_trigger
+BEFORE INSERT ON Transaccion
+FOR EACH ROW
+WHEN (NEW.es_con_tarjeta = TRUE)
+EXECUTE FUNCTION check_desde_tarjeta();
 
 -- Checkear rendimiento activo
 CREATE OR REPLACE FUNCTION check_rendimiento()
@@ -120,34 +159,12 @@ BEGIN
     -- Checkear si el usuario tiene un rendimiento activo, es decir fecha de fin_plazo es posterior a la fecha de la transaccion
     -- Joinear RendimientoUsuario con Rendimiento para obtener el id del rendimiento activo
     IF EXISTS (
-        SELECT * FROM RendimientoUsuario JOIN Rendimiento ON RendimientoUsuario.id = Rendimiento.id WHERE clave_uniforme = NEW.CU_Origen AND NEW.fecha < Rendimiento.fin_plazo 
+        SELECT * FROM RendimientoUsuario JOIN Rendimiento ON RendimientoUsuario.id = Rendimiento.id WHERE clave_uniforme = NEW.CU_Origen AND NEW.fecha < Rendimiento.fin_plazo AND Rendimiento.pago = FALSE 
     ) THEN
         -- Finalizar el rendimiento
-
-        -- UPDATE Rendimiento 
-        -- SET fin_plazo = NEW.fecha
-        -- WHERE id = (SELECT id FROM RendimientoUsuario WHERE clave_uniforme = NEW.CU_Origen AND fin_plazo IS NULL)
-        -- RETURNING TNA, monto INTO old_tna, old_monto;
-
-        -- INSERT INTO Rendimiento (fin_plazo, comienzo_plazo, TNA, monto) 
-        -- VALUES (
-        --     NEW.fecha + INTERVAL '1 day',
-        --     NEW.fecha, 
-        --     old_tna,
-        --     old_monto - NEW.monto
-        -- )
-        -- RETURNING id INTO new_id;
-        
-        -- INSERT INTO RendimientoUsuario (clave_uniforme, id) 
-        -- VALUES (
-        --     NEW.CU_Origen, 
-        --     new_id
-        -- );
-        
         UPDATE Rendimiento 
         SET fin_plazo = NEW.fecha
         WHERE id = (SELECT id FROM RendimientoUsuario WHERE clave_uniforme = NEW.CU_Origen AND fin_plazo IS NULL);
-
         INSERT INTO Rendimiento (fin_plazo, comienzo_plazo, TNA, monto) 
         VALUES (
             NEW.fecha + INTERVAL '1 day',
@@ -155,17 +172,13 @@ BEGIN
             -- Select last TNA and monto from the rendimiento
             (SELECT TNA FROM Rendimiento WHERE id = (SELECT id FROM RendimientoUsuario WHERE clave_uniforme = NEW.CU_Origen AND fin_plazo IS NOT NULL)),
             (SELECT monto FROM Rendimiento WHERE id = (SELECT id FROM RendimientoUsuario WHERE clave_uniforme = NEW.CU_Origen AND fin_plazo IS NOT NULL)) - NEW.monto
-        );
-        
+        ); 
         INSERT INTO RendimientoUsuario (clave_uniforme, id) 
         VALUES (
             NEW.CU_Origen, 
             -- Select id from last Rendimiento inserted
             (SELECT id FROM Rendimiento ORDER BY id DESC LIMIT 1)
         );
-
-
-
     END IF;
     RETURN NEW;
 END;
@@ -198,7 +211,7 @@ EXECUTE FUNCTION check_tarjeta();
 CREATE OR REPLACE FUNCTION check_tarjeta_usuario()
 RETURNS TRIGGER AS $$
 BEGIN
-    IF (SELECT CU FROM Tarjeta WHERE numero = NEW.numero) = NEW.CU_Origen THEN
+    IF (SELECT CU FROM Tarjeta WHERE numero = NEW.numero) != NEW.CU_Origen THEN
         RAISE EXCEPTION 'Tarjeta no pertenece al usuario';
     END IF;
     RETURN NEW;
@@ -218,11 +231,11 @@ CREATE OR REPLACE FUNCTION update_saldos()
 RETURNS TRIGGER AS $$
 BEGIN
     IF (SELECT esVirtual FROM Clave WHERE clave_uniforme = NEW.CU_Destino) = TRUE THEN
-        UPDATE Usuarios SET saldo = saldo + NEW.monto WHERE clave_uniforme = NEW.CU_Destino;
+        UPDATE Usuario SET saldo = saldo + NEW.monto WHERE clave_uniforme = NEW.CU_Destino;
     END IF;
     IF NEW.es_con_tarjeta = FALSE THEN
         IF (SELECT esVirtual FROM Clave WHERE clave_uniforme = NEW.CU_Origen) = TRUE THEN
-            UPDATE Usuarios SET saldo = saldo - NEW.monto WHERE clave_uniforme = NEW.CU_Origen;
+            UPDATE Usuario SET saldo = saldo - NEW.monto WHERE clave_uniforme = NEW.CU_Origen;
         END IF;
     END IF;
     RETURN NEW;
@@ -232,7 +245,9 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER update_saldos_trigger
 AFTER INSERT ON Transaccion
 FOR EACH ROW
+WHEN (NEW.estado = 'Completada')
 EXECUTE FUNCTION update_saldos();
+
 
 CREATE TABLE TransaccionTarjeta (
     codigo INTEGER,
@@ -241,4 +256,3 @@ CREATE TABLE TransaccionTarjeta (
     FOREIGN KEY (numero) REFERENCES Tarjeta(numero),
     FOREIGN KEY (codigo) REFERENCES Transaccion(codigo)
 );
-
